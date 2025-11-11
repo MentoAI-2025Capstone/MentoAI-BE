@@ -14,12 +14,15 @@ public interface UserRepository extends JpaRepository<UserEntity, Long> {
     Optional<UserEntity> findByEmail(String email);
     
     boolean existsByEmail(String email);
-    
+
+    Optional<UserEntity> findByAuthProviderAndProviderUserId(UserEntity.AuthProvider authProvider, String providerUserId);
+
     @Query("SELECT u FROM UserEntity u WHERE " +
            "LOWER(u.name) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
            "LOWER(u.email) LIKE LOWER(CONCAT('%', :q, '%'))")
     Optional<UserEntity> findBySearchQuery(@Param("q") String query);
 }
+
 
 
 

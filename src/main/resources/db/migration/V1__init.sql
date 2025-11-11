@@ -1,13 +1,13 @@
 CREATE TABLE "users" (
   "user_id" bigserial PRIMARY KEY,
-  "auth_provider" varchar,
-  "provider_user_id" text,
-  "email" text,
-  "name" text,
+  "auth_provider" auth_provider NOT NULL DEFAULT 'GOOGLE',
+  "provider_user_id" text NOT NULL,
+  "email" text NOT NULL,
+  "name" text NOT NULL,
   "nickname" text,
   "profile_image_url" text,
-  "created_at" timestamptz,
-  "updated_at" timestamptz
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE "user_profiles" (
@@ -116,6 +116,14 @@ CREATE TABLE "attachments" (
   "created_at" timestamptz
 );
 
+CREATE TABLE "refresh_tokens" (
+  "refresh_token_id" bigserial PRIMARY KEY,
+  "user_id" bigint NOT NULL,
+  "token" text NOT NULL,
+  "expires_at" timestamptz NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE "calendar_events" (
   "event_id" bigserial PRIMARY KEY,
   "user_id" bigint,
@@ -173,6 +181,10 @@ CREATE UNIQUE INDEX ON "target_role_major_mapping" ("role_id", "major");
 
 CREATE UNIQUE INDEX ON "target_role_recommended_certs" ("role_id", "name");
 
+CREATE UNIQUE INDEX "idx_users_email" ON "users" ("email");
+CREATE UNIQUE INDEX "idx_users_provider" ON "users" ("auth_provider", "provider_user_id");
+CREATE UNIQUE INDEX "idx_refresh_tokens_token" ON "refresh_tokens" ("token");
+
 COMMENT ON TABLE "users" IS 'auth_provider: GOOGLE only (for now)';
 
 COMMENT ON TABLE "tags" IS 'unique (tag_name, tag_type)';
@@ -200,6 +212,8 @@ ALTER TABLE "activity_tags" ADD FOREIGN KEY ("tag_id") REFERENCES "tags" ("tag_i
 ALTER TABLE "activity_dates" ADD FOREIGN KEY ("activity_id") REFERENCES "activities" ("activity_id");
 
 ALTER TABLE "attachments" ADD FOREIGN KEY ("activity_id") REFERENCES "activities" ("activity_id");
+
+ALTER TABLE "refresh_tokens" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("user_id") ON DELETE CASCADE;
 
 ALTER TABLE "calendar_events" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("user_id");
 
