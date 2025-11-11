@@ -1,3 +1,11 @@
+   -- ========= ENUMS =========
+CREATE TYPE auth_provider AS ENUM ('GOOGLE');
+CREATE TYPE activity_type AS ENUM ('JOB','CONTEST','STUDY','CAMPUS');
+CREATE TYPE activity_status AS ENUM ('OPEN','CLOSED','CANCELLED');
+CREATE TYPE file_type AS ENUM ('IMAGE','PDF');
+CREATE TYPE tag_type AS ENUM ('ROLE','SKILL','TOPIC','CATEGORY');
+CREATE TYPE experience_type AS ENUM ('PROJECT','INTERNSHIP','UNDERGRAD_RESEARCH','PARTTIME','OTHER');
+CREATE TYPE seniority AS ENUM ('ENTRY','JUNIOR','MID','SENIOR','LEAD','PRINCIPAL');
 CREATE TABLE "users" (
   "user_id" bigserial PRIMARY KEY,
   "auth_provider" auth_provider NOT NULL DEFAULT 'GOOGLE',
