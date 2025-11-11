@@ -37,13 +37,12 @@ public class AuthController {
     }
 
     @GetMapping("/google/callback")
-    public ResponseEntity<AuthResponse> googleCallback(
+    public ResponseEntity<Void> googleCallback(
             @RequestParam String code,
             @RequestParam(required = false) String state,
             HttpServletRequest request
     ) {
-        AuthResponse response = authService.handleCallback(code, state, request);
-        return ResponseEntity.ok(response);
+        return authService.handleCallback(code, state, request);
     }
 
     @PostMapping("/refresh")

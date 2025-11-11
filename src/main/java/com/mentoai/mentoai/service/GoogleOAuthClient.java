@@ -96,6 +96,10 @@ public class GoogleOAuthClient {
         return body;
     }
 
+    public String getFrontendCallbackUri() {
+        return googleProperties.frontendCallbackUri();
+    }
+
     private String resolveRedirectUri(boolean useLocalRedirect) {
         if (useLocalRedirect && googleProperties.redirectUriLocal() != null && !googleProperties.redirectUriLocal().isBlank()) {
             return googleProperties.redirectUriLocal();

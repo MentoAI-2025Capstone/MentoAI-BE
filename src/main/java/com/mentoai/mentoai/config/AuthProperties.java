@@ -11,7 +11,8 @@ public class AuthProperties {
     @ConfigurationProperties(prefix = "application.auth.google")
     public record Google(
             String redirectUri,
-            String redirectUriLocal
+            String redirectUriLocal,
+            String frontendCallbackUri
     ) {
     }
 

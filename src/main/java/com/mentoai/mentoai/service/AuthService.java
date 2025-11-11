@@ -22,6 +22,10 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.Optional;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.http.ResponseEntity;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +49,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse handleCallback(String code, String state, HttpServletRequest request) {
+    public ResponseEntity<Void> handleCallback(String code, String state, HttpServletRequest request) {
         validateState(state, request.getSession(false));
         boolean useLocal = isLocalRequest(request);
 
@@ -63,7 +67,11 @@ public class AuthService {
 
         AuthTokens tokens = issueTokens(user);
         clearState(request.getSession(false));
-        return AuthResponse.of(user, tokens);
+
+        URI redirectUri = buildFrontendRedirect(tokens);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setLocation(redirectUri);
+        return new ResponseEntity<>(headers, HttpStatus.FOUND);
     }
 
     private AuthTokens issueTokens(UserEntity user) {
@@ -129,5 +137,16 @@ public class AuthService {
             host = request.getServerName();
         }
         return host != null && host.contains("localhost");
+    }
+
+    private URI buildFrontendRedirect(AuthTokens tokens) {
+        return UriComponentsBuilder.fromUriString(googleOAuthClient.getFrontendCallbackUri())
+                .fragment(String.format("accessToken=%s&refreshToken=%s&tokenType=%s&expiresIn=%d",
+                        tokens.accessToken(),
+                        tokens.refreshToken(),
+                        tokens.tokenType(),
+                        tokens.expiresIn()))
+                .build(true)
+                .toUri();
     }
 }
