@@ -1,10 +1,7 @@
 package com.mentoai.mentoai.controller;
 
-import com.mentoai.mentoai.controller.dto.AuthResponse;
 import com.mentoai.mentoai.controller.dto.AuthTokens;
 import com.mentoai.mentoai.controller.dto.AuthStatus;
-import com.mentoai.mentoai.controller.dto.UserSummary;
-import com.mentoai.mentoai.controller.mapper.UserMapper;
 import com.mentoai.mentoai.entity.UserEntity;
 import com.mentoai.mentoai.security.UserPrincipal;
 import com.mentoai.mentoai.service.AuthService;
@@ -16,12 +13,10 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
-import org.springframework.transaction.annotation.Transactional;
 
 @RestController
 @RequestMapping("/auth")
@@ -33,7 +28,11 @@ public class AuthController {
     private final UserProfileService userProfileService;
 
     @GetMapping("/google/start")
-    public ResponseEntity<Void> startGoogleOAuth(HttpServletRequest request) {
+    public ResponseEntity<Void> startGoogleOAuth(
+            @RequestParam(required = false) String redirectUri,
+            HttpServletRequest request
+    ) {
+        authService.rememberFrontendRedirect(request, redirectUri);
         URI redirect = authService.buildAuthorizationRedirect(request);
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(redirect)
@@ -41,12 +40,14 @@ public class AuthController {
     }
 
     @GetMapping("/google/callback")
-    public ResponseEntity<Void> googleCallback(
+    public ResponseEntity<?> googleCallback(
             @RequestParam String code,
             @RequestParam(required = false) String state,
+            @RequestParam(defaultValue = "redirect") String mode,
+            @RequestParam(required = false) String redirectUri,
             HttpServletRequest request
     ) {
-        return authService.handleCallback(code, state, request);
+        return authService.handleCallback(code, state, mode, redirectUri, request);
     }
 
     @PostMapping("/refresh")
