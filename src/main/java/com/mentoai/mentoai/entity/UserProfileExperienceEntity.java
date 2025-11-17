@@ -1,5 +1,6 @@
 package com.mentoai.mentoai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,7 @@ public class UserProfileExperienceEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
+    @JsonIgnore
     private UserProfileEntity profile;
 
     @Enumerated(EnumType.STRING)

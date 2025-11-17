@@ -1,5 +1,6 @@
 package com.mentoai.mentoai.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -34,6 +35,7 @@ public class UserProfileEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @MapsId
     @JoinColumn(name = "user_id")
+    @JsonIgnore
     private UserEntity user;
 
     @Column(name = "birth_year")
