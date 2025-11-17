@@ -110,7 +110,10 @@ public final class UserProfileMapper {
         if (profile.getInterestDomains() == null) {
             profile.setInterestDomains(new ArrayList<>());
         }
-        profile.getInterestDomains().clear();
+        // 기존 항목이 있을 때만 clear
+        if (!profile.getInterestDomains().isEmpty()) {
+            profile.getInterestDomains().clear();
+        }
         if (request.interestDomains() != null) {
             profile.getInterestDomains().addAll(
                     request.interestDomains().stream()
@@ -120,11 +123,13 @@ public final class UserProfileMapper {
             );
         }
 
-        // null 체크 추가
+        // awards 처리 - 기존 항목이 있을 때만 clear
         if (profile.getAwards() == null) {
             profile.setAwards(new ArrayList<>());
         }
-        profile.getAwards().clear();
+        if (!profile.getAwards().isEmpty()) {
+            profile.getAwards().clear();
+        }
         if (request.awards() != null) {
             for (UserProfileUpsertRequest.Award awardRequest : request.awards()) {
                 UserProfileAwardEntity award = new UserProfileAwardEntity();
@@ -138,11 +143,13 @@ public final class UserProfileMapper {
             }
         }
 
-        // null 체크 추가
+        // certifications 처리 - 기존 항목이 있을 때만 clear
         if (profile.getCertifications() == null) {
             profile.setCertifications(new ArrayList<>());
         }
-        profile.getCertifications().clear();
+        if (!profile.getCertifications().isEmpty()) {
+            profile.getCertifications().clear();
+        }
         if (request.certifications() != null) {
             for (UserProfileUpsertRequest.Certification certRequest : request.certifications()) {
                 UserProfileCertificationEntity cert = new UserProfileCertificationEntity();
@@ -158,11 +165,13 @@ public final class UserProfileMapper {
             }
         }
 
-        // null 체크 추가
+        // techStack 처리 - 기존 항목이 있을 때만 clear
         if (profile.getTechStack() == null) {
             profile.setTechStack(new ArrayList<>());
         }
-        profile.getTechStack().clear();
+        if (!profile.getTechStack().isEmpty()) {
+            profile.getTechStack().clear();
+        }
         if (request.techStack() != null) {
             for (UserProfileUpsertRequest.Skill skillRequest : request.techStack()) {
                 profile.getTechStack().add(UserProfileSkill.builder()
@@ -172,11 +181,13 @@ public final class UserProfileMapper {
             }
         }
 
-        // null 체크 추가
+        // experiences 처리 - 기존 항목이 있을 때만 clear
         if (profile.getExperiences() == null) {
             profile.setExperiences(new ArrayList<>());
         }
-        profile.getExperiences().clear();
+        if (!profile.getExperiences().isEmpty()) {
+            profile.getExperiences().clear();
+        }
         if (request.experiences() != null) {
             for (UserProfileUpsertRequest.Experience expRequest : request.experiences()) {
                 UserProfileExperienceEntity experience = new UserProfileExperienceEntity();
