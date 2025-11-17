@@ -13,6 +13,7 @@ import com.mentoai.mentoai.entity.UserProfileSkill;
 import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -105,6 +106,10 @@ public final class UserProfileMapper {
             profile.setUniversityMajor(null);
         }
 
+        // null 체크 추가
+        if (profile.getInterestDomains() == null) {
+            profile.setInterestDomains(new ArrayList<>());
+        }
         profile.getInterestDomains().clear();
         if (request.interestDomains() != null) {
             profile.getInterestDomains().addAll(
@@ -115,6 +120,10 @@ public final class UserProfileMapper {
             );
         }
 
+        // null 체크 추가
+        if (profile.getAwards() == null) {
+            profile.setAwards(new ArrayList<>());
+        }
         profile.getAwards().clear();
         if (request.awards() != null) {
             for (UserProfileUpsertRequest.Award awardRequest : request.awards()) {
@@ -129,6 +138,10 @@ public final class UserProfileMapper {
             }
         }
 
+        // null 체크 추가
+        if (profile.getCertifications() == null) {
+            profile.setCertifications(new ArrayList<>());
+        }
         profile.getCertifications().clear();
         if (request.certifications() != null) {
             for (UserProfileUpsertRequest.Certification certRequest : request.certifications()) {
@@ -145,6 +158,10 @@ public final class UserProfileMapper {
             }
         }
 
+        // null 체크 추가
+        if (profile.getTechStack() == null) {
+            profile.setTechStack(new ArrayList<>());
+        }
         profile.getTechStack().clear();
         if (request.techStack() != null) {
             for (UserProfileUpsertRequest.Skill skillRequest : request.techStack()) {
@@ -155,6 +172,10 @@ public final class UserProfileMapper {
             }
         }
 
+        // null 체크 추가
+        if (profile.getExperiences() == null) {
+            profile.setExperiences(new ArrayList<>());
+        }
         profile.getExperiences().clear();
         if (request.experiences() != null) {
             for (UserProfileUpsertRequest.Experience expRequest : request.experiences()) {
@@ -169,6 +190,11 @@ public final class UserProfileMapper {
                 experience.setCurrent(expRequest.isCurrent());
                 experience.setDescription(expRequest.description());
                 experience.setUrl(expRequest.url());
+                
+                // experience의 techStack도 null 체크
+                if (experience.getTechStack() == null) {
+                    experience.setTechStack(new ArrayList<>());
+                }
                 experience.getTechStack().clear();
                 if (expRequest.techStack() != null) {
                     experience.getTechStack().addAll(

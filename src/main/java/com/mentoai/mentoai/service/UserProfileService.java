@@ -11,6 +11,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -38,6 +42,22 @@ public class UserProfileService {
                     UserProfileEntity newProfile = new UserProfileEntity();
                     newProfile.setUserId(userId);
                     newProfile.setUser(user);
+                    // 리스트 초기화 보장
+                    if (newProfile.getInterestDomains() == null) {
+                        newProfile.setInterestDomains(new ArrayList<>());
+                    }
+                    if (newProfile.getTechStack() == null) {
+                        newProfile.setTechStack(new ArrayList<>());
+                    }
+                    if (newProfile.getAwards() == null) {
+                        newProfile.setAwards(new ArrayList<>());
+                    }
+                    if (newProfile.getCertifications() == null) {
+                        newProfile.setCertifications(new ArrayList<>());
+                    }
+                    if (newProfile.getExperiences() == null) {
+                        newProfile.setExperiences(new ArrayList<>());
+                    }
                     return newProfile;
                 });
 
