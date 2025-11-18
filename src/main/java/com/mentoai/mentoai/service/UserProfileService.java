@@ -120,12 +120,20 @@ public class UserProfileService {
     public boolean isProfileComplete(Long userId) {
         return userProfileRepository.findById(userId)
                 .map(profile -> {
-                    // 필수 필드 체크: 대학교 정보가 있는지 확인
-                    return profile.getUniversityName() != null && 
-                           !profile.getUniversityName().isBlank() &&
-                           profile.getUniversityMajor() != null && 
-                           !profile.getUniversityMajor().isBlank() &&
-                           profile.getUniversityGrade() != null;
+                    String universityName = profile.getUniversityName();
+                    String major = profile.getUniversityMajor();
+                    Integer grade = profile.getUniversityGrade();
+                    
+                    // null 체크 및 trim 처리
+                    boolean nameValid = universityName != null && !universityName.trim().isBlank();
+                    boolean majorValid = major != null && !major.trim().isBlank();
+                    boolean gradeValid = grade != null;
+                    
+                    log.debug("Profile completeness check - userId: {}, nameValid: {}, majorValid: {}, gradeValid: {}, " +
+                            "universityName: '{}', major: '{}', grade: {}", 
+                            userId, nameValid, majorValid, gradeValid, universityName, major, grade);
+                    
+                    return nameValid && majorValid && gradeValid;
                 })
                 .orElse(false);
     }
