@@ -40,30 +40,26 @@ public class UserProfileService {
             UserEntity user = userRepository.findById(userId)
                     .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
 
-            // 기존 프로필 존재 여부 확인
-            boolean exists = userProfileRepository.existsById(userId);
+            // 기존 프로필 존재 여부 확인 (findById로 실제 엔티티 조회)
+            UserProfileEntity profile = userProfileRepository.findById(userId).orElse(null);
             
-            UserProfileEntity profile;
-            
-            if (!exists) {
-                // 새로 생성된 경우: 먼저 빈 엔티티를 저장
+            if (profile == null) {
+                // 새로 생성된 경우: @MapsId를 활용하여 user만 설정
                 profile = new UserProfileEntity();
-                profile.setUserId(userId);
-                profile.setUser(user);
+                // ⚠️ setUserId() 호출하지 않음! @MapsId가 자동으로 설정함
+                profile.setUser(user); // 이것만으로 userId가 자동으로 채워짐
                 profile.setInterestDomains(new ArrayList<>());
                 profile.setTechStack(new ArrayList<>());
                 profile.setAwards(new ArrayList<>());
                 profile.setCertifications(new ArrayList<>());
                 profile.setExperiences(new ArrayList<>());
                 
-                // 먼저 저장하여 관리 상태로 만듦
-                profile = userProfileRepository.saveAndFlush(profile);
+                // EntityManager.persist()를 직접 사용하여 INSERT 보장
+                entityManager.persist(profile);
+                entityManager.flush(); // 즉시 DB에 반영
                 log.debug("Created new profile for user: {}", userId);
             } else {
-                // 기존 프로필 로드
-                profile = userProfileRepository.findById(userId)
-                        .orElseThrow(() -> new IllegalArgumentException("Profile not found: " + userId));
-                
+                // 기존 프로필 로드됨
                 // Lazy 로딩된 컬렉션들을 강제로 로드
                 if (profile.getAwards() != null) {
                     profile.getAwards().size(); // Lazy 로딩 강제
@@ -77,7 +73,6 @@ public class UserProfileService {
                 
                 // 기존 자식 엔티티들을 명시적으로 삭제
                 if (profile.getAwards() != null && !profile.getAwards().isEmpty()) {
-                    // 컬렉션을 복사하여 삭제 (원본 컬렉션을 수정하면서 반복하면 안 됨)
                     new ArrayList<>(profile.getAwards()).forEach(award -> {
                         award.setProfile(null); // 관계 해제
                         entityManager.remove(award);
@@ -106,9 +101,13 @@ public class UserProfileService {
             // 이제 안전하게 수정 가능
             UserProfileMapper.apply(profile, request);
             
-            // 최종 저장
-            UserProfileEntity saved = userProfileRepository.saveAndFlush(profile);
+            // 최종 저장 (기존 엔티티는 merge, 새 엔티티는 이미 persist됨)
+            entityManager.flush(); // 변경사항 반영
             log.debug("Successfully saved profile for user: {}", userId);
+            
+            // 엔티티를 다시 로드하여 최신 상태 보장
+            UserProfileEntity saved = userProfileRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalStateException("Failed to save profile"));
             
             return UserProfileMapper.toResponse(saved);
         } catch (Exception e) {
