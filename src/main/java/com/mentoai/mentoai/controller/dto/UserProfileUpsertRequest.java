@@ -8,7 +8,6 @@ import java.time.LocalDate;
 import java.util.List;
 
 public record UserProfileUpsertRequest(
-        Integer birthYear,
         @Valid University university,
         List<String> interestDomains,
         List<@Valid Award> awards,

@@ -528,8 +528,95 @@ public class RoleFitService {
         return Math.round(value * 10.0) / 10.0;
     }
 
-    private static String resolveTarget(String target) {
-        return StringUtils.hasText(target) ? target : "general";
+    private String resolveTarget(String target) {
+        if (!StringUtils.hasText(target)) {
+            return "general";
+        }
+        
+        String normalized = target.trim().toLowerCase(Locale.ROOT);
+        
+        // 1. 정확한 roleId 매칭 시도
+        Optional<TargetRoleEntity> exactMatch = targetRoleRepository.findById(normalized);
+        if (exactMatch.isPresent()) {
+            return exactMatch.get().getRoleId();
+        }
+        
+        // 2. 이름으로 정확히 매칭 시도
+        Optional<TargetRoleEntity> nameMatch = targetRoleRepository.findByNameIgnoreCase(target.trim());
+        if (nameMatch.isPresent()) {
+            return nameMatch.get().getRoleId();
+        }
+        
+        // 3. 키워드로 부분 매칭 시도
+        List<TargetRoleEntity> keywordMatches = targetRoleRepository.findByKeyword(normalized);
+        if (!keywordMatches.isEmpty()) {
+            // 가장 관련성 높은 매칭 선택 (이름에 키워드가 포함된 것 우선)
+            TargetRoleEntity bestMatch = keywordMatches.stream()
+                    .filter(role -> role.getName() != null && 
+                            role.getName().toLowerCase(Locale.ROOT).contains(normalized))
+                    .findFirst()
+                    .orElse(keywordMatches.get(0));
+            return bestMatch.getRoleId();
+        }
+        
+        // 4. 키워드 추출 및 매칭 (예: "백엔드 엔지니어" → "backend")
+        String extractedKeyword = extractRoleKeyword(normalized);
+        if (!extractedKeyword.equals(normalized)) {
+            List<TargetRoleEntity> extractedMatches = targetRoleRepository.findByKeyword(extractedKeyword);
+            if (!extractedMatches.isEmpty()) {
+                return extractedMatches.get(0).getRoleId();
+            }
+        }
+        
+        // 5. 매칭 실패 시 원본 반환 (또는 "general")
+        return normalized;
+    }
+    
+    private String extractRoleKeyword(String input) {
+        // 직무 키워드 매핑
+        Map<String, String> roleKeywords = Map.of(
+                "백엔드", "backend",
+                "backend", "backend",
+                "프론트엔드", "frontend",
+                "frontend", "frontend",
+                "풀스택", "fullstack",
+                "fullstack", "fullstack",
+                "데이터", "data",
+                "data", "data",
+                "ai", "ai",
+                "머신러닝", "ai",
+                "ml", "ai",
+                "devops", "devops",
+                "시스템", "system",
+                "system", "system",
+                "보안", "security",
+                "security", "security",
+                "모바일", "mobile",
+                "mobile", "mobile",
+                "ios", "ios",
+                "android", "android"
+        );
+        
+        String lowerInput = input.toLowerCase(Locale.ROOT);
+        
+        // 키워드 매핑에서 찾기
+        for (Map.Entry<String, String> entry : roleKeywords.entrySet()) {
+            if (lowerInput.contains(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        
+        // 키워드 추출 (예: "백엔드 엔지니어" → "backend")
+        // 공백으로 분리하여 첫 번째 단어 사용
+        String[] parts = lowerInput.split("\\s+");
+        if (parts.length > 0) {
+            String firstPart = parts[0];
+            if (roleKeywords.containsKey(firstPart)) {
+                return roleKeywords.get(firstPart);
+            }
+        }
+        
+        return input;
     }
 }
 

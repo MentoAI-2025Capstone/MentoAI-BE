@@ -1,15 +1,22 @@
 package com.mentoai.mentoai.service;
 
+import com.mentoai.mentoai.entity.ActivityDateEntity;
 import com.mentoai.mentoai.entity.ActivityEntity;
+import com.mentoai.mentoai.entity.ActivityTagEntity;
+import com.mentoai.mentoai.entity.ActivityTagId;
 import com.mentoai.mentoai.entity.TagEntity;
 import com.mentoai.mentoai.repository.ActivityRepository;
 import com.mentoai.mentoai.repository.TagRepository;
+import com.mentoai.mentoai.service.LinkareerCrawlerService.LinkareerActivity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -23,6 +30,7 @@ public class IngestService {
     
     private final ActivityRepository activityRepository;
     private final TagRepository tagRepository;
+    private final LinkareerCrawlerService linkareerCrawlerService;
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     
     // 데이터 수집 트리거
@@ -59,6 +67,9 @@ public class IngestService {
                     break;
                 case "manual":
                     ingestManualActivities(config);
+                    break;
+                case "linkareer":
+                    ingestLinkareerContests(config);
                     break;
                 default:
                     log.warn("Unknown ingestion source: {}", source);
@@ -224,6 +235,134 @@ public class IngestService {
         ));
         
         return activities;
+    }
+    
+    // Linkareer 공모전 수집
+    @Transactional
+    public Map<String, Object> ingestLinkareerContests(Map<String, Object> config) {
+        log.info("Linkareer contests ingestion started");
+        
+        String mode = config != null ? (String) config.get("mode") : "partial";
+        List<LinkareerActivity> linkareerActivities;
+        
+        if ("total".equalsIgnoreCase(mode)) {
+            linkareerActivities = linkareerCrawlerService.crawlAllContests();
+        } else {
+            linkareerActivities = linkareerCrawlerService.crawlRecentContests();
+        }
+        
+        int created = 0;
+        int skipped = 0;
+        
+        for (LinkareerActivity linkareerActivity : linkareerActivities) {
+            try {
+                // 중복 체크 (URL 기반)
+                String url = linkareerActivity.id() != null 
+                        ? "https://linkareer.com/activity/" + linkareerActivity.id()
+                        : null;
+                
+                if (url != null && activityRepository.existsByUrl(url)) {
+                    skipped++;
+                    log.debug("Skipped duplicate activity: {}", linkareerActivity.title());
+                    continue;
+                }
+                
+                ActivityEntity activity = convertLinkareerToActivity(linkareerActivity);
+                activityRepository.save(activity);
+                created++;
+                
+                log.debug("Created Linkareer activity: {}", activity.getTitle());
+            } catch (Exception e) {
+                log.error("Failed to create Linkareer activity: {}", linkareerActivity.title(), e);
+            }
+        }
+        
+        log.info("Linkareer contests ingestion finished: {} created, {} skipped", created, skipped);
+        
+        Map<String, Object> result = new HashMap<>();
+        result.put("created", created);
+        result.put("skipped", skipped);
+        result.put("total", linkareerActivities.size());
+        return result;
+    }
+    
+    // LinkareerActivity를 ActivityEntity로 변환
+    private ActivityEntity convertLinkareerToActivity(LinkareerActivity linkareer) {
+        ActivityEntity activity = new ActivityEntity();
+        
+        activity.setTitle(linkareer.title());
+        activity.setOrganizer(linkareer.organizationName());
+        activity.setType(ActivityEntity.ActivityType.CONTEST);
+        activity.setStatus(ActivityEntity.ActivityStatus.OPEN);
+        activity.setIsCampus(false);
+        
+        // URL 생성
+        if (linkareer.id() != null) {
+            activity.setUrl("https://linkareer.com/activity/" + linkareer.id());
+        }
+        
+        // 마감일 설정
+        if (linkareer.recruitCloseAt() != null) {
+            LocalDateTime closeDate = LocalDateTime.ofInstant(
+                    Instant.ofEpochMilli(linkareer.recruitCloseAt()),
+                    ZoneId.systemDefault()
+            );
+            
+            ActivityDateEntity dateEntity = new ActivityDateEntity();
+            dateEntity.setActivity(activity);
+            dateEntity.setDateType(ActivityDateEntity.DateType.APPLY_END);
+            dateEntity.setDateValue(closeDate);
+            
+            if (activity.getDates() == null) {
+                activity.setDates(new ArrayList<>());
+            }
+            activity.getDates().add(dateEntity);
+        }
+        
+        // 태그 생성 또는 찾기
+        if (StringUtils.hasText(linkareer.field())) {
+            TagEntity tag = findOrCreateTag(linkareer.field(), TagEntity.TagType.CATEGORY);
+            if (tag != null) {
+                ActivityTagEntity activityTag = new ActivityTagEntity();
+                activityTag.setActivity(activity);
+                activityTag.setTag(tag);
+                activityTag.setId(new ActivityTagId());
+                
+                if (activity.getActivityTags() == null) {
+                    activity.setActivityTags(new ArrayList<>());
+                }
+                activity.getActivityTags().add(activityTag);
+            }
+        }
+        
+        return activity;
+    }
+    
+    // 태그 찾기 또는 생성
+    private TagEntity findOrCreateTag(String tagName, TagEntity.TagType tagType) {
+        if (!StringUtils.hasText(tagName)) {
+            return null;
+        }
+        
+        String normalizedName = tagName.trim();
+        
+        // 기존 태그 찾기
+        Optional<TagEntity> existingTag = tagRepository.findByName(normalizedName);
+        if (existingTag.isPresent()) {
+            return existingTag.get();
+        }
+        
+        // 새 태그 생성
+        TagEntity newTag = new TagEntity();
+        newTag.setName(normalizedName);
+        newTag.setType(tagType);
+        
+        try {
+            return tagRepository.save(newTag);
+        } catch (Exception e) {
+            log.warn("Failed to create tag: {}", normalizedName, e);
+            return null;
+        }
     }
     
     // 수집 상태 조회

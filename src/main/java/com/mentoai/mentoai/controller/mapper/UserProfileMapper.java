@@ -32,7 +32,6 @@ public final class UserProfileMapper {
 
         return new UserProfileResponse(
                 entity.getUserId(),
-                entity.getBirthYear(),
                 buildUniversity(entity),
                 entity.getInterestDomains() != null ? entity.getInterestDomains() : Collections.emptyList(),
                 safeList(entity.getAwards()).stream()
@@ -83,7 +82,6 @@ public final class UserProfileMapper {
         return new UserProfileResponse(
                 user.getId(),
                 null,
-                null,
                 Collections.emptyList(),
                 Collections.emptyList(),
                 Collections.emptyList(),
@@ -94,8 +92,6 @@ public final class UserProfileMapper {
     }
 
     public static void apply(UserProfileEntity profile, UserProfileUpsertRequest request) {
-        profile.setBirthYear(request.birthYear());
-
         if (request.university() != null) {
             profile.setUniversityName(request.university().universityName());
             profile.setUniversityGrade(request.university().grade());

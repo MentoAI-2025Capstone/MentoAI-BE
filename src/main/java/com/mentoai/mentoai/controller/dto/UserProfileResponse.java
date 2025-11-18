@@ -6,7 +6,6 @@ import java.util.List;
 
 public record UserProfileResponse(
         Long userId,
-        Integer birthYear,
         University university,
         List<String> interestDomains,
         List<Award> awards,

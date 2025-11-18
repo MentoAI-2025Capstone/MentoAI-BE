@@ -38,9 +38,6 @@ public class UserProfileEntity {
     @JsonIgnore
     private UserEntity user;
 
-    @Column(name = "birth_year")
-    private Integer birthYear;
-
     @Column(name = "university_name")
     private String universityName;
 

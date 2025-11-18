@@ -1,5 +1,6 @@
 package com.mentoai.mentoai.controller;
 
+import com.mentoai.mentoai.controller.dto.ActivityRecommendationResponse;
 import com.mentoai.mentoai.entity.ActivityEntity;
 import com.mentoai.mentoai.service.RecommendService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,23 @@ public class RecommendController {
         try {
             List<ActivityEntity> recommendations = recommendService.getRecommendations(
                     userId, limit, type, campusOnly);
+            return ResponseEntity.ok(recommendations);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @GetMapping("/activities/{userId}/with-scores")
+    @Operation(summary = "점수 포함 활동 추천", description = "사용자의 관심사, 프로필, 직무 적합도를 기반으로 활동을 추천하고 점수를 포함하여 반환합니다.")
+    public ResponseEntity<List<ActivityRecommendationResponse>> getRecommendationsWithScores(
+            @Parameter(description = "사용자 ID") @PathVariable Long userId,
+            @Parameter(description = "추천 개수") @RequestParam(defaultValue = "10") Integer limit,
+            @Parameter(description = "활동 유형") @RequestParam(required = false) String type,
+            @Parameter(description = "캠퍼스 활동만") @RequestParam(required = false) Boolean campusOnly,
+            @Parameter(description = "타겟 직무 (예: 백엔드, 프론트엔드)") @RequestParam(required = false) String targetRole) {
+        try {
+            List<ActivityRecommendationResponse> recommendations = recommendService.getRecommendationsWithScores(
+                    userId, limit, type, campusOnly, targetRole);
             return ResponseEntity.ok(recommendations);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().build();

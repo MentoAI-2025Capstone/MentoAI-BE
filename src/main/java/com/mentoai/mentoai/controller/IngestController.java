@@ -21,7 +21,7 @@ public class IngestController {
     @PostMapping("/trigger")
     @Operation(summary = "데이터 수집 트리거", description = "지정된 소스에서 데이터를 수집합니다.")
     public ResponseEntity<Map<String, Object>> triggerIngest(
-            @Parameter(description = "수집 소스 (campus, external, manual)") @RequestParam String source,
+            @Parameter(description = "수집 소스 (campus, external, manual, linkareer)") @RequestParam String source,
             @RequestBody(required = false) Map<String, Object> config) {
         try {
             Map<String, Object> result = ingestService.triggerIngest(source, config != null ? config : Map.of());
@@ -87,6 +87,22 @@ public class IngestController {
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
                 "error", "수동 활동 입력 실패",
+                "message", e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/linkareer")
+    @Operation(summary = "Linkareer 공모전 수집", description = "Linkareer에서 공모전 데이터를 크롤링합니다.")
+    public ResponseEntity<Map<String, Object>> ingestLinkareerContests(
+            @Parameter(description = "수집 모드 (total: 전체, partial: 최신 일부)") @RequestParam(defaultValue = "partial") String mode) {
+        try {
+            Map<String, Object> config = Map.of("mode", mode);
+            Map<String, Object> result = ingestService.ingestLinkareerContests(config);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "Linkareer 공모전 수집 실패",
                 "message", e.getMessage()
             ));
         }

@@ -48,6 +48,8 @@ public interface ActivityRepository extends JpaRepository<ActivityEntity, Long> 
     List<ActivityEntity> findByStatus(ActivityStatus status);
     
     List<ActivityEntity> findByIsCampus(Boolean isCampus);
+    
+    boolean existsByUrl(String url);
 
     default Page<ActivityEntity> findByFilters(
             String query,
