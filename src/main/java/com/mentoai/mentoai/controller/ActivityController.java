@@ -32,8 +32,9 @@ public class ActivityController {
 
     @GetMapping
     @Transactional(readOnly = true)
-    @Operation(summary = "활동 목록 조회", description = "필터/정렬을 포함한 활동 목록을 반환합니다.")
+    @Operation(summary = "활동 목록 조회", description = "필터/정렬을 포함한 활동 목록을 반환합니다. userId가 제공되면 사용자 맞춤 추천이 적용됩니다.")
     public ResponseEntity<PagedActivitiesResponse> listActivities(
+            @Parameter(description = "사용자 ID (선택, 제공 시 맞춤 추천 적용)") @RequestParam(required = false) Long userId,
             @Parameter(description = "제목/내용 전체 검색어") @RequestParam(required = false) String q,
             @Parameter(description = "활동 유형 필터") @RequestParam(required = false) ActivityType type,
             @Parameter(description = "태그 이름(복수 지정 시 콤마 구분)") @RequestParam(required = false) String tag,
@@ -65,6 +66,7 @@ public class ActivityController {
         }
 
         Page<com.mentoai.mentoai.entity.ActivityEntity> result = activityService.getActivities(
+                userId,
                 q,
                 type,
                 tagNames,

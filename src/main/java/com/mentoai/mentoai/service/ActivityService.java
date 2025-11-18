@@ -6,8 +6,10 @@ import com.mentoai.mentoai.controller.dto.AttachmentUpsertRequest;
 import com.mentoai.mentoai.entity.*;
 import com.mentoai.mentoai.entity.ActivityEntity.ActivityType;
 import com.mentoai.mentoai.entity.ActivityEntity.ActivityStatus;
+import com.mentoai.mentoai.entity.UserInterestEntity;
 import com.mentoai.mentoai.repository.ActivityRepository;
 import com.mentoai.mentoai.repository.TagRepository;
+import com.mentoai.mentoai.repository.UserInterestRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
@@ -18,7 +20,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,8 +35,11 @@ public class ActivityService {
     private final ActivityRepository activityRepository;
     private final TagRepository tagRepository;
     private final NotificationService notificationService;
+    private final RecommendService recommendService;
+    private final UserInterestRepository userInterestRepository;
     
     public Page<ActivityEntity> getActivities(
+            Long userId,
             String query,
             ActivityType type,
             List<String> tagNames,
@@ -60,6 +67,12 @@ public class ActivityService {
         // deadlineBefore 필터는 일시적으로 비활성화 (PostgreSQL 타입 추론 문제)
         // TODO: 추후 필요시 별도 쿼리 메서드로 구현
 
+        // userId가 제공되면 사용자 맞춤 추천 적용
+        if (userId != null) {
+            return getPersonalizedActivities(userId, query, type, tagNames, isCampus, status, pageable);
+        }
+
+        // 기존 로직 (일반 조회)
         return activityRepository.search(
                 query,
                 type,
@@ -70,6 +83,112 @@ public class ActivityService {
                 ActivityDateEntity.DateType.APPLY_END,
                 pageable
         );
+    }
+    
+    /**
+     * 사용자 맞춤 활동 목록 조회
+     */
+    private Page<ActivityEntity> getPersonalizedActivities(
+            Long userId,
+            String query,
+            ActivityType type,
+            List<String> tagNames,
+            Boolean isCampus,
+            ActivityStatus status,
+            Pageable pageable) {
+        
+        // 사용자 관심사 조회
+        List<UserInterestEntity> userInterests = userInterestRepository.findByUserIdOrderByScoreDesc(userId);
+        
+        if (userInterests.isEmpty()) {
+            // 관심사가 없으면 일반 조회로 fallback
+            return activityRepository.search(
+                    query,
+                    type,
+                    (tagNames == null || tagNames.isEmpty()) ? null : tagNames,
+                    isCampus,
+                    status,
+                    null,
+                    ActivityDateEntity.DateType.APPLY_END,
+                    pageable
+            );
+        }
+        
+        // 먼저 필터 조건으로 활동 조회 (더 많은 결과 가져오기)
+        Page<ActivityEntity> filteredActivities = activityRepository.search(
+                query,
+                type,
+                (tagNames == null || tagNames.isEmpty()) ? null : tagNames,
+                isCampus,
+                status,
+                null,
+                ActivityDateEntity.DateType.APPLY_END,
+                Pageable.unpaged() // 모든 결과 가져오기
+        );
+        
+        // 사용자 관심사 태그 ID 목록
+        List<Long> userInterestTagIds = userInterests.stream()
+                .map(UserInterestEntity::getTagId)
+                .collect(Collectors.toList());
+        
+        // 활동별 점수 계산 및 정렬
+        Map<ActivityEntity, Double> activityScores = new HashMap<>();
+        for (ActivityEntity activity : filteredActivities.getContent()) {
+            double score = 0.0;
+            
+            // 활동의 태그와 사용자 관심사 매칭
+            if (activity.getActivityTags() != null && !activity.getActivityTags().isEmpty()) {
+                for (var activityTag : activity.getActivityTags()) {
+                    if (userInterestTagIds.contains(activityTag.getTag().getId())) {
+                        // 관심사 점수에 따라 가중치 적용 (RecommendService와 동일한 로직)
+                        UserInterestEntity matchingInterest = userInterests.stream()
+                                .filter(ui -> ui.getTagId().equals(activityTag.getTag().getId()))
+                                .findFirst()
+                                .orElse(null);
+                        if (matchingInterest != null) {
+                            score += matchingInterest.getScore() * 10.0;
+                        }
+                    }
+                }
+            }
+            
+            // 활동 유형 보너스
+            if (activity.getType() == ActivityType.STUDY) {
+                score += 5.0;
+            } else if (activity.getType() == ActivityType.CONTEST) {
+                score += 3.0;
+            }
+            
+            // 캠퍼스 활동 가중치
+            if (activity.getIsCampus() != null && activity.getIsCampus()) {
+                score += 2.0;
+            }
+            
+            if (score > 0) {
+                activityScores.put(activity, score);
+            }
+        }
+        
+        // 점수 순으로 정렬
+        List<ActivityEntity> personalizedList = activityScores.entrySet().stream()
+                .sorted(Map.Entry.<ActivityEntity, Double>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        
+        // 점수가 0인 활동도 추가 (점수 순 정렬 후)
+        List<ActivityEntity> zeroScoreActivities = filteredActivities.getContent().stream()
+                .filter(a -> !activityScores.containsKey(a))
+                .collect(Collectors.toList());
+        personalizedList.addAll(zeroScoreActivities);
+        
+        // 페이지네이션 적용
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), personalizedList.size());
+        List<ActivityEntity> pagedList = start < personalizedList.size() 
+                ? personalizedList.subList(start, end) 
+                : List.of();
+        
+        return new PageImpl<>(pagedList, pageable, personalizedList.size());
     }
     
     @Transactional

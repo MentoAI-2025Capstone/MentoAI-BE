@@ -52,8 +52,9 @@ public class RecommendService {
         List<UserInterestEntity> userInterests = userInterestRepository.findByUserIdOrderByScoreDesc(userId);
         
         if (userInterests.isEmpty()) {
-            // 관심사가 없으면 일반적인 인기 활동 추천
-            return getTrendingActivities(limit, type);
+            // 관심사가 없으면 빈 리스트 반환 (모든 활동 반환 X)
+            log.warn("User {} has no interests, returning empty recommendations", userId);
+            return List.of();
         }
         
         // 관심사 기반 추천 로직
@@ -92,12 +93,7 @@ public class RecommendService {
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toList());
         
-        // 추천이 부족하면 인기 활동으로 보완
-        if (recommendations.size() < limit) {
-            List<ActivityEntity> trending = getTrendingActivities(limit - recommendations.size(), type);
-            recommendations.addAll(trending);
-        }
-        
+        // 추천이 부족해도 인기 활동으로 보완하지 않음 (사용자 맞춤만 반환)
         return recommendations;
     }
     
@@ -106,12 +102,12 @@ public class RecommendService {
         double score = 0.0;
         
         // 활동의 태그들과 사용자 관심사 매칭
-        if (activity.getActivityTags() != null) {
+        if (activity.getActivityTags() != null && !activity.getActivityTags().isEmpty()) {
             for (var activityTag : activity.getActivityTags()) {
                 for (UserInterestEntity userInterest : userInterests) {
                     if (activityTag.getTag().getId().equals(userInterest.getTagId())) {
-                        // 관심사 점수에 따라 가중치 적용
-                        score += userInterest.getScore() * 0.3;
+                        // 관심사 점수(1-5)를 0-50점 범위로 변환 (10배 증가)
+                        score += userInterest.getScore() * 10.0;
                     }
                 }
             }
@@ -119,14 +115,14 @@ public class RecommendService {
         
         // 활동 유형 선호도 (간단한 규칙 기반)
         if (activity.getType() == ActivityType.STUDY) {
-            score += 0.2;
+            score += 5.0;  // 0.2 -> 5.0
         } else if (activity.getType() == ActivityType.CONTEST) {
-            score += 0.1;
+            score += 3.0;  // 0.1 -> 3.0
         }
         
         // 캠퍼스 활동 가중치
         if (activity.getIsCampus() != null && activity.getIsCampus()) {
-            score += 0.1;
+            score += 2.0;  // 0.1 -> 2.0
         }
         
         return score;
@@ -565,20 +561,37 @@ public class RecommendService {
                 request, userProfile, userInterests, request.getTopKOrDefault() * 2
         );
         
-        // 추가 fallback: 여전히 비어있으면 일반 활동 목록으로 fallback
-        if (candidateActivities.isEmpty()) {
-            log.warn("No candidate activities found after retrieval, falling back to general activities");
-            Pageable pageable = PageRequest.of(0, request.getTopKOrDefault() * 2, 
-                    Sort.by(Sort.Direction.DESC, "createdAt"));
-            candidateActivities = activityRepository.findByFilters(
-                    null, null, null, null, pageable
-            ).getContent();
+        // 추가 fallback: 여전히 비어있으면 사용자 관심사 기반으로 재시도
+        if (candidateActivities.isEmpty() && !userInterests.isEmpty()) {
+            log.warn("No candidate activities found after retrieval, trying user interest-based search");
+            // 사용자 관심사 태그로 필터링된 활동만 반환
+            List<String> interestTagNames = userInterests.stream()
+                    .map(interest -> tagRepository.findById(interest.getTagId())
+                            .map(tag -> tag.getName())
+                            .orElse(null))
+                    .filter(name -> name != null)
+                    .distinct()
+                    .collect(Collectors.toList());
             
-            // 여전히 비어있으면 빈 응답 반환 (데이터베이스에 활동이 없음)
+            if (!interestTagNames.isEmpty()) {
+                Pageable pageable = PageRequest.of(0, request.getTopKOrDefault() * 2, 
+                        Sort.by(Sort.Direction.DESC, "createdAt"));
+                candidateActivities = activityRepository.findByComplexFilters(
+                        null, null, null, null,
+                        interestTagNames,
+                        pageable
+                ).getContent();
+            }
+            
+            // 여전히 비어있으면 빈 응답 반환 (사용자 맞춤 활동이 없음)
             if (candidateActivities.isEmpty()) {
-                log.warn("No activities found in database");
+                log.warn("No personalized activities found for user {}", request.userId());
                 return new RecommendResponse(List.of());
             }
+        } else if (candidateActivities.isEmpty()) {
+            // 관심사도 없고 검색 결과도 없으면 빈 응답 반환
+            log.warn("No activities found and user has no interests");
+            return new RecommendResponse(List.of());
         }
         
         // 3. Gemini에 RAG 프롬프트 구성 및 전송
@@ -657,13 +670,26 @@ public class RecommendService {
                 .limit(limit)
                 .collect(Collectors.toList());
         
-        // 결과가 없으면 일반 활동 목록으로 fallback
-        if (activities.isEmpty()) {
-            log.warn("No relevant activities found, falling back to general activities");
-            Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
-            activities = activityRepository.findByFilters(
-                    null, null, null, null, pageable
-            ).getContent();
+        // 결과가 없으면 사용자 관심사 기반 추천으로 fallback (일반 활동 목록 X)
+        if (activities.isEmpty() && !userInterests.isEmpty()) {
+            log.warn("No relevant activities found, using user interest-based recommendations");
+            // 사용자 관심사 태그로 필터링된 활동만 반환
+            List<String> interestTagNames = userInterests.stream()
+                    .map(interest -> tagRepository.findById(interest.getTagId())
+                            .map(tag -> tag.getName())
+                            .orElse(null))
+                    .filter(name -> name != null)
+                    .distinct()
+                    .collect(Collectors.toList());
+            
+            if (!interestTagNames.isEmpty()) {
+                Pageable pageable = PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "createdAt"));
+                activities = activityRepository.findByComplexFilters(
+                        null, null, null, null,
+                        interestTagNames,
+                        pageable
+                ).getContent();
+            }
         }
         
         return activities;
