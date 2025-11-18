@@ -32,8 +32,7 @@ public interface ActivityRepository extends JpaRepository<ActivityEntity, Long> 
             (:isCampus IS NULL OR a.isCampus = :isCampus) AND
             (:status IS NULL OR a.status = :status) AND
             (:tagNames IS NULL OR t.name IN :tagNames) AND
-            (d.id IS NULL OR :deadlineType IS NULL OR d.dateType = :deadlineType) AND
-            (:deadlineBefore IS NULL OR d.id IS NULL OR d.dateValue <= :deadlineBefore)
+            (d.id IS NULL OR :deadlineType IS NULL OR d.dateType = :deadlineType)
         """)
     Page<ActivityEntity> search(
         @Param("q") String query,

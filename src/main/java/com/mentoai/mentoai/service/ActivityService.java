@@ -57,10 +57,8 @@ public class ActivityService {
         Sort sortObj = Sort.by(sortDirection, sort);
         Pageable pageable = PageRequest.of(page, size, sortObj);
 
-        // deadlineBefore가 null이면 null을 전달하고, 쿼리에서 IS NULL 체크로 처리
-        LocalDateTime deadlineDateTime = deadlineBefore != null 
-                ? deadlineBefore.atTime(LocalTime.MAX)
-                : null;
+        // deadlineBefore 필터는 일시적으로 비활성화 (PostgreSQL 타입 추론 문제)
+        // TODO: 추후 필요시 별도 쿼리 메서드로 구현
 
         return activityRepository.search(
                 query,
@@ -68,7 +66,7 @@ public class ActivityService {
                 (tagNames == null || tagNames.isEmpty()) ? null : tagNames,
                 isCampus,
                 status,
-                deadlineDateTime,
+                null, // deadlineBefore 필터 비활성화
                 ActivityDateEntity.DateType.APPLY_END,
                 pageable
         );
