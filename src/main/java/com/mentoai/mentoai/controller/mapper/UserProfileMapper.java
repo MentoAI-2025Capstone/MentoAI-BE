@@ -127,15 +127,9 @@ public final class UserProfileMapper {
         if (profile.getAwards() == null) {
             profile.setAwards(new ArrayList<>());
         }
-        // clear() 대신 기존 항목을 명시적으로 제거하고 관계 해제
+        // clear()만 호출 (Service에서 이미 삭제 처리됨)
         if (!profile.getAwards().isEmpty()) {
-            // 새 리스트를 만들어서 기존 항목들을 제거
-            List<UserProfileAwardEntity> toRemove = new ArrayList<>(profile.getAwards());
             profile.getAwards().clear();
-            // 관계 해제 (JPA가 삭제하도록)
-            for (UserProfileAwardEntity award : toRemove) {
-                award.setProfile(null);
-            }
         }
         if (request.awards() != null) {
             for (UserProfileUpsertRequest.Award awardRequest : request.awards()) {
@@ -155,11 +149,7 @@ public final class UserProfileMapper {
             profile.setCertifications(new ArrayList<>());
         }
         if (!profile.getCertifications().isEmpty()) {
-            List<UserProfileCertificationEntity> toRemove = new ArrayList<>(profile.getCertifications());
             profile.getCertifications().clear();
-            for (UserProfileCertificationEntity cert : toRemove) {
-                cert.setProfile(null);
-            }
         }
         if (request.certifications() != null) {
             for (UserProfileUpsertRequest.Certification certRequest : request.certifications()) {
@@ -197,11 +187,7 @@ public final class UserProfileMapper {
             profile.setExperiences(new ArrayList<>());
         }
         if (!profile.getExperiences().isEmpty()) {
-            List<UserProfileExperienceEntity> toRemove = new ArrayList<>(profile.getExperiences());
             profile.getExperiences().clear();
-            for (UserProfileExperienceEntity exp : toRemove) {
-                exp.setProfile(null);
-            }
         }
         if (request.experiences() != null) {
             for (UserProfileUpsertRequest.Experience expRequest : request.experiences()) {
