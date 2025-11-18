@@ -57,10 +57,10 @@ public class ActivityService {
         Sort sortObj = Sort.by(sortDirection, sort);
         Pageable pageable = PageRequest.of(page, size, sortObj);
 
-        LocalDateTime deadlineDateTime = null;
-        if (deadlineBefore != null) {
-            deadlineDateTime = deadlineBefore.atTime(LocalTime.MAX);
-        }
+        // PostgreSQL 타입 추론 문제를 피하기 위해 null 대신 MAX 값을 사용
+        LocalDateTime deadlineDateTime = deadlineBefore != null 
+                ? deadlineBefore.atTime(LocalTime.MAX)
+                : LocalDateTime.MAX;
 
         return activityRepository.search(
                 query,
