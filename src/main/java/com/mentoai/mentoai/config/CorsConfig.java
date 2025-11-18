@@ -12,7 +12,7 @@ import java.util.List;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Value("${application.cors.allowed-origins:https://mentoai-frontend.vercel.app,http://localhost:3000}")
+    @Value("${application.cors.allowed-origins:https://mentoai-fe.vercel.app,http://localhost:3000}")
     private String allowedOrigins;
 
     @Override
