@@ -5,8 +5,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -14,6 +17,7 @@ import java.util.Map;
 @RequestMapping("/ingest")
 @Tag(name = "ingest", description = "데이터 수집")
 @RequiredArgsConstructor
+@Slf4j
 public class IngestController {
 
     private final IngestService ingestService;
@@ -96,15 +100,42 @@ public class IngestController {
         }
     }
 
-    @PostMapping("/manual")
-    @Operation(summary = "수동 활동 입력", description = "수동으로 활동 데이터를 입력합니다.")
+    @PostMapping(value = "/manual", consumes = {MediaType.APPLICATION_JSON_VALUE, MediaType.MULTIPART_FORM_DATA_VALUE})
+    @Operation(summary = "수동 활동 입력", description = "JSON 또는 엑셀 파일로 활동 데이터를 입력합니다.")
     public ResponseEntity<Map<String, Object>> ingestManualActivities(
-            @RequestBody Map<String, Object> activitiesData) {
+            @Parameter(description = "엑셀 파일 (.xlsx, .xls)") 
+            @RequestParam(value = "file", required = false) MultipartFile file,
+            @RequestBody(required = false) Map<String, Object> activitiesData) {
         try {
-            Map<String, Object> config = Map.of("activities", activitiesData.get("activities"));
+            Map<String, Object> config;
+            
+            // 엑셀 파일이 있으면 엑셀 파싱
+            if (file != null && !file.isEmpty()) {
+                String filename = file.getOriginalFilename();
+                if (filename == null || (!filename.endsWith(".xlsx") && !filename.endsWith(".xls"))) {
+                    return ResponseEntity.badRequest().body(Map.of(
+                        "error", "엑셀 파일만 업로드 가능합니다 (.xlsx, .xls)"
+                    ));
+                }
+                
+                // 엑셀 파일에서 데이터 추출
+                java.util.List<Map<String, Object>> excelActivities = ingestService.parseExcelFile(file);
+                config = Map.of("activities", excelActivities, "source", "excel");
+            } 
+            // JSON 데이터가 있으면 기존 로직 사용
+            else if (activitiesData != null && activitiesData.containsKey("activities")) {
+                config = Map.of("activities", activitiesData.get("activities"), "source", "json");
+            } 
+            else {
+                return ResponseEntity.badRequest().body(Map.of(
+                    "error", "엑셀 파일 또는 activities 데이터가 필요합니다"
+                ));
+            }
+            
             Map<String, Object> result = ingestService.triggerIngest("manual", config);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
+            log.error("수동 활동 입력 실패", e);
             return ResponseEntity.badRequest().body(Map.of(
                 "error", "수동 활동 입력 실패",
                 "message", e.getMessage()

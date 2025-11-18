@@ -51,6 +51,8 @@ public interface ActivityRepository extends JpaRepository<ActivityEntity, Long> 
     List<ActivityEntity> findByIsCampus(Boolean isCampus);
     
     boolean existsByUrl(String url);
+    
+    boolean existsByTitle(String title);
 
     default Page<ActivityEntity> findByFilters(
             String query,

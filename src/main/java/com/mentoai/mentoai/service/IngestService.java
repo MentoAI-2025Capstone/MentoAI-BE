@@ -10,10 +10,16 @@ import com.mentoai.mentoai.repository.TagRepository;
 import com.mentoai.mentoai.service.crawler.ExternalActivity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -148,8 +154,26 @@ public class IngestService {
         }
         
         int created = 0;
+        int skipped = 0;
+        
         for (Map<String, Object> activityData : manualActivities) {
             try {
+                // 중복 체크 (URL 또는 제목 기반)
+                String url = (String) activityData.get("url");
+                String title = (String) activityData.get("title");
+                
+                if (url != null && !url.trim().isEmpty() && activityRepository.existsByUrl(url)) {
+                    skipped++;
+                    log.debug("Skipped duplicate activity (URL): {}", title);
+                    continue;
+                }
+                
+                if (title != null && !title.trim().isEmpty() && activityRepository.existsByTitle(title)) {
+                    skipped++;
+                    log.debug("Skipped duplicate activity (Title): {}", title);
+                    continue;
+                }
+                
                 ActivityEntity activity = createActivityFromData(activityData);
                 activityRepository.save(activity);
                 created++;
@@ -160,7 +184,106 @@ public class IngestService {
             }
         }
         
-        log.info("Manual activities ingestion finished: {} created", created);
+        log.info("Manual activities ingestion finished: {} created, {} skipped", created, skipped);
+    }
+    
+    /**
+     * 엑셀 파일을 파싱하여 활동 데이터 리스트로 변환
+     * 엑셀 형식 예시:
+     * - 첫 번째 행: 헤더 (title, content, organizer, type, url, startDate, endDate, field, ...)
+     * - 두 번째 행부터: 데이터
+     */
+    public List<Map<String, Object>> parseExcelFile(MultipartFile file) throws IOException {
+        List<Map<String, Object>> activities = new ArrayList<>();
+        
+        try (InputStream inputStream = file.getInputStream()) {
+            Workbook workbook;
+            
+            // 파일 확장자에 따라 적절한 Workbook 생성
+            String filename = file.getOriginalFilename();
+            if (filename != null && filename.endsWith(".xlsx")) {
+                workbook = new XSSFWorkbook(inputStream);
+            } else {
+                workbook = new HSSFWorkbook(inputStream);
+            }
+            
+            Sheet sheet = workbook.getSheetAt(0); // 첫 번째 시트 사용
+            
+            if (sheet.getPhysicalNumberOfRows() < 2) {
+                workbook.close();
+                throw new IllegalArgumentException("엑셀 파일에 데이터가 없습니다 (최소 2행 필요: 헤더 + 데이터)");
+            }
+            
+            // 헤더 행 읽기
+            Row headerRow = sheet.getRow(0);
+            List<String> headers = new ArrayList<>();
+            for (Cell cell : headerRow) {
+                headers.add(getCellValueAsString(cell));
+            }
+            
+            // 데이터 행 읽기
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) continue;
+                
+                Map<String, Object> activityData = new HashMap<>();
+                
+                for (int j = 0; j < headers.size() && j < row.getPhysicalNumberOfCells(); j++) {
+                    String header = headers.get(j);
+                    Cell cell = row.getCell(j);
+                    
+                    if (header != null && !header.trim().isEmpty() && cell != null) {
+                        String value = getCellValueAsString(cell);
+                        if (value != null && !value.trim().isEmpty()) {
+                            activityData.put(header.trim().toLowerCase(), value);
+                        }
+                    }
+                }
+                
+                // 최소한 title은 있어야 함
+                if (activityData.containsKey("title") && activityData.get("title") != null) {
+                    activities.add(activityData);
+                }
+            }
+            
+            workbook.close();
+        }
+        
+        return activities;
+    }
+    
+    /**
+     * Cell 값을 String으로 변환
+     */
+    private String getCellValueAsString(Cell cell) {
+        if (cell == null) {
+            return null;
+        }
+        
+        switch (cell.getCellType()) {
+            case STRING:
+                return cell.getStringCellValue().trim();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    // 날짜 형식인 경우
+                    return cell.getDateCellValue().toString();
+                } else {
+                    // 숫자인 경우
+                    double numericValue = cell.getNumericCellValue();
+                    // 정수인지 확인
+                    if (numericValue == (long) numericValue) {
+                        return String.valueOf((long) numericValue);
+                    } else {
+                        return String.valueOf(numericValue);
+                    }
+                }
+            case BOOLEAN:
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                return cell.getCellFormula();
+            default:
+                return "";
+        }
     }
     
     // 데이터로부터 활동 엔티티 생성
@@ -169,12 +292,25 @@ public class IngestService {
         
         activity.setTitle((String) data.get("title"));
         activity.setContent((String) data.get("content"));
-        activity.setOrganizer((String) data.get("organizer"));
+        
+        // organizer 매핑 (organization 또는 organizer 모두 지원)
+        String organizer = (String) data.get("organizer");
+        if (organizer == null || organizer.trim().isEmpty()) {
+            organizer = (String) data.get("organization");
+        }
+        activity.setOrganizer(organizer);
+        
         activity.setUrl((String) data.get("url"));
         
-        // 타입 설정
+        // 타입 설정 (category 또는 type 모두 지원)
         String typeStr = (String) data.get("type");
+        if (typeStr == null || typeStr.trim().isEmpty()) {
+            typeStr = (String) data.get("category");
+        }
+        
         if (typeStr != null) {
+            // 한글 카테고리명을 영어 타입으로 변환
+            typeStr = convertCategoryToType(typeStr);
             try {
                 activity.setType(ActivityEntity.ActivityType.valueOf(typeStr.toUpperCase()));
             } catch (IllegalArgumentException e) {
@@ -187,7 +323,54 @@ public class IngestService {
         // 상태 설정
         activity.setStatus(ActivityEntity.ActivityStatus.OPEN);
         
+        // deadline 처리
+        String deadlineStr = (String) data.get("deadline");
+        if (deadlineStr != null && !deadlineStr.trim().isEmpty()) {
+            try {
+                // YYYY-MM-DD 형식 파싱
+                java.time.LocalDate deadlineDate = java.time.LocalDate.parse(deadlineStr);
+                LocalDateTime deadlineDateTime = deadlineDate.atTime(23, 59, 59);
+                
+                ActivityDateEntity dateEntity = new ActivityDateEntity();
+                dateEntity.setActivity(activity);
+                dateEntity.setDateType(ActivityDateEntity.DateType.APPLY_END);
+                dateEntity.setDateValue(deadlineDateTime);
+                
+                if (activity.getDates() == null) {
+                    activity.setDates(new ArrayList<>());
+                }
+                activity.getDates().add(dateEntity);
+            } catch (Exception e) {
+                log.warn("Failed to parse deadline: {}", deadlineStr, e);
+            }
+        }
+        
         return activity;
+    }
+    
+    /**
+     * 한글 카테고리명을 영어 타입으로 변환
+     */
+    private String convertCategoryToType(String category) {
+        if (category == null) {
+            return "STUDY";
+        }
+        
+        String lowerCategory = category.toLowerCase().trim();
+        
+        // 카테고리 매핑
+        if (lowerCategory.contains("공모전") || lowerCategory.contains("contest")) {
+            return "CONTEST";
+        } else if (lowerCategory.contains("채용") || lowerCategory.contains("job") || lowerCategory.contains("인턴")) {
+            return "JOB";
+        } else if (lowerCategory.contains("스터디") || lowerCategory.contains("study")) {
+            return "STUDY";
+        } else if (lowerCategory.contains("교내") || lowerCategory.contains("campus")) {
+            return "CAMPUS";
+        }
+        
+        // 기본값
+        return "STUDY";
     }
     
     // 샘플 교내 활동 데이터 생성
