@@ -47,6 +47,9 @@ public class UserProfileEntity {
     @Column(name = "university_major")
     private String universityMajor;
 
+    @Column(name = "target_role_id")
+    private String targetRoleId;
+
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 

@@ -32,6 +32,7 @@ public final class UserProfileMapper {
 
         return new UserProfileResponse(
                 entity.getUserId(),
+                entity.getTargetRoleId(),
                 buildUniversity(entity),
                 entity.getInterestDomains() != null ? entity.getInterestDomains() : Collections.emptyList(),
                 safeList(entity.getAwards()).stream()
@@ -81,6 +82,7 @@ public final class UserProfileMapper {
     public static UserProfileResponse empty(UserEntity user) {
         return new UserProfileResponse(
                 user.getId(),
+                null,
                 null,
                 Collections.emptyList(),
                 Collections.emptyList(),
@@ -214,6 +216,12 @@ public final class UserProfileMapper {
                 }
                 profile.getExperiences().add(experience);
             }
+        }
+
+        if (request.targetRoleId() != null && !request.targetRoleId().isBlank()) {
+            profile.setTargetRoleId(request.targetRoleId().trim());
+        } else {
+            profile.setTargetRoleId(null);
         }
 
         profile.setUpdatedAt(OffsetDateTime.now());

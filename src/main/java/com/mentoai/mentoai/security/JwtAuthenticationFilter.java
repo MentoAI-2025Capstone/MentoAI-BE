@@ -53,6 +53,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return path.startsWith("/auth/google"); // google 관련 요청은 필터 제외
+        // Swagger 및 API 문서 경로는 필터 제외
+        return path.startsWith("/auth/google") ||
+               path.startsWith("/v3/api-docs") ||
+               path.startsWith("/swagger-ui") ||
+               path.startsWith("/swagger-ui.html") ||
+               path.startsWith("/docs");
     }
 }
